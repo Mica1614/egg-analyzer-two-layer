@@ -31,16 +31,8 @@ LOGS_DIR   = BASE_DIR / "logs"
 LOGS_DIR.mkdir(exist_ok=True)
 LOG_FILE   = LOGS_DIR / "analysis_results.txt"
 
-MODEL_L1_PATH = Path(
-    r"C:\Users\Administrator\Desktop\egg-cubator"
-    r"\egg-analyzer-model-training\egg_analyzer_layer_one_model"
-    r"\egg_condition_model_finetuned.keras"
-)
-MODEL_L2_PATH = Path(
-    r"C:\Users\Administrator\Desktop\egg-cubator"
-    r"\egg-analyzer-model-training\egg_analyzer_layer_two_model"
-    r"\egg_stage_model_finetuned.keras"
-)
+MODEL_L1_PATH = BASE_DIR / "models" / "egg_condition_model_finetuned.keras"
+MODEL_L2_PATH = BASE_DIR / "models" / "egg_stage_model_finetuned.keras"
 
 # ─────────────────────────────────────────────
 # Class labels (must match training order)
