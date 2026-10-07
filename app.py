@@ -41,6 +41,9 @@ L1_CLASSES = ["infertile", "dead", "fertile"]   # alphabetical = Keras default
 L2_CLASSES = ["initial_stage", "late_stage", "middle_stage"]  # alphabetical
 
 IMG_SIZE = 224
+# Phone photos are shrunk to this longest side right after decoding: the models only use
+# 224 px, and full-size copies (blur, annotation, JPEG) cost 100+ MB per request.
+MAX_SIDE = 1280
 
 # ─────────────────────────────────────────────
 # Load models once at startup
@@ -53,10 +56,18 @@ print("Loading Layer 2 model …")
 model_l2: tf.keras.Model = tf.keras.models.load_model(MODEL_L2_PATH)
 print("  ✓ Layer 2 loaded")
 
+
+def _predict(model: tf.keras.Model, tensor: np.ndarray) -> np.ndarray:
+    """Single-image inference. Calling the model directly instead of model.predict():
+    predict() builds a new data pipeline on every call, and its memory keeps growing
+    when called once per request."""
+    return model(tensor, training=False).numpy()[0]
+
+
 # Warm-up inference (avoids first-request latency)
 _dummy = np.zeros((1, IMG_SIZE, IMG_SIZE, 3), dtype=np.float32)
-model_l1.predict(_dummy, verbose=0)
-model_l2.predict(_dummy, verbose=0)
+_predict(model_l1, _dummy)
+_predict(model_l2, _dummy)
 print("Models warm-up complete.\n")
 
 # ─────────────────────────────────────────────
@@ -203,7 +214,7 @@ def _run_inference(img_bgr: np.ndarray) -> dict:
     tensor = _preprocess(img_bgr)
 
     # ── Layer 1 ──────────────────────────────
-    l1_probs = model_l1.predict(tensor, verbose=0)[0]
+    l1_probs = _predict(model_l1, tensor)
     l1_idx   = int(np.argmax(l1_probs))
     l1_class = L1_CLASSES[l1_idx]
     l1_conf  = float(l1_probs[l1_idx]) * 100
@@ -223,7 +234,7 @@ def _run_inference(img_bgr: np.ndarray) -> dict:
         }
 
     # ── Layer 2 (fertile only) ───────────────
-    l2_probs = model_l2.predict(tensor, verbose=0)[0]
+    l2_probs = _predict(model_l2, tensor)
     l2_idx   = int(np.argmax(l2_probs))
     l2_class = L2_CLASSES[l2_idx]
     l2_conf  = float(l2_probs[l2_idx]) * 100
@@ -291,6 +302,11 @@ async def analyze(file: UploadFile = File(...)):
     img_bgr = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
     if img_bgr is None:
         raise HTTPException(status_code=422, detail="Could not decode image.")
+    del raw, np_arr
+
+    scale = MAX_SIDE / max(img_bgr.shape[:2])
+    if scale < 1:
+        img_bgr = cv2.resize(img_bgr, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
 
     t0 = time.perf_counter()
     result = _run_inference(img_bgr)
